@@ -568,6 +568,53 @@ const RETRYABLE_NETWORK_CODES = new Set([
 /** Failures where the request certainly never reached Dzengi (safe to retry even for orders). */
 const NOT_DELIVERED_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH']);
 
+/** Plain-language reason for a socket-level failure, keyed by Node.js error code. */
+const NETWORK_ERROR_REASONS: Record<string, string> = {
+	ECONNREFUSED: 'Dzengi refused the connection',
+	ECONNRESET: 'the connection to Dzengi was closed unexpectedly',
+	EPIPE: 'the connection to Dzengi was closed unexpectedly',
+	ETIMEDOUT: 'the request to Dzengi timed out',
+	ECONNABORTED: 'the request to Dzengi timed out or was aborted',
+	ENOTFOUND: 'the Dzengi host name could not be resolved',
+	EAI_AGAIN: 'the Dzengi host name could not be resolved (temporary DNS failure)',
+	ENETUNREACH: 'Dzengi is not reachable from this network',
+	EHOSTUNREACH: 'Dzengi is not reachable from this network',
+};
+
+/**
+ * Builds the error for a request that got no HTTP response.
+ *
+ * n8n's NodeApiError/NodeOperationError replace the message with a generic text when
+ * the error object carries a Node.js network code (e.g. `code: 'ECONNRESET'`) or when the
+ * message text contains one. That would drop the "outcome UNKNOWN" warning for orders, so
+ * the raw error is not passed through (which also keeps request headers holding the API
+ * key out of n8n's error data) and the code only appears in the description.
+ */
+function buildNetworkError(
+	node: INode,
+	error: unknown,
+	code: string | undefined,
+	context: IErrorContext,
+): NodeApiError {
+	const reason = (code && NETWORK_ERROR_REASONS[code]) ?? 'the request to Dzengi failed before a response was received';
+	const delivered = !(code && NOT_DELIVERED_CODES.has(code));
+	const message =
+		context.isMutation && delivered
+			? `Network error: ${reason}. The execution status is UNKNOWN — the request may have been executed. Check open orders/positions before retrying.`
+			: `Network error: ${reason}.`;
+	const rawMessage = isRecord(error) && typeof error.message === 'string' ? error.message : undefined;
+	const details = [
+		code ? `Network error code: ${code}` : undefined,
+		rawMessage && !rawMessage.includes('?') ? `Details: ${rawMessage}` : undefined,
+		`Request: ${context.method} ${context.endpoint}`,
+	].filter(Boolean);
+	return new NodeApiError(node, { message, networkErrorCode: code ?? 'unknown' } as JsonObject, {
+		message,
+		description: details.join(' — '),
+		itemIndex: context.itemIndex,
+	});
+}
+
 function networkErrorCode(error: unknown): string | undefined {
 	if (!isRecord(error)) return undefined;
 	const candidates = [error.code, isRecord(error.cause) ? error.cause.code : undefined];
@@ -732,13 +779,10 @@ export async function dzengiApiRequest(
 					await sleep(backoffDelay(attempt));
 					continue;
 				}
-				const outcome =
-					isMutation && !(code && NOT_DELIVERED_CODES.has(code))
-						? ' The execution status is UNKNOWN — check open orders/positions before retrying.'
-						: '';
-				throw new NodeApiError(this.getNode(), (isRecord(error) ? error : {}) as JsonObject, {
-					message: `Could not reach Dzengi (${code ?? 'network error'}).${outcome}`,
-					description: `Request: ${method} ${path}`,
+				throw buildNetworkError(this.getNode(), error, code, {
+					method,
+					endpoint: path,
+					isMutation,
 					itemIndex: options.itemIndex,
 				});
 			}

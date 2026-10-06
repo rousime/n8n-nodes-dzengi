@@ -3,4 +3,3 @@ dist/
 .git/
 .vscode/
 examples/
-package-lock.json

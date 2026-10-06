@@ -155,6 +155,44 @@ test('network errors: reads retry, undelivered orders retry, ambiguous orders do
 	assert.equal(reset.requests.length, 1);
 });
 
+// n8n's NodeApiError replaces messages that carry a Node.js network code with a generic
+// text. These checks run against whichever n8n-workflow is installed, so they catch the
+// "UNKNOWN outcome" warning being dropped.
+for (const code of ['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EPIPE']) {
+	test(`network error ${code} on an order keeps the UNKNOWN-outcome warning`, async () => {
+		const ctx = createContext({ responses: [networkError(code)] });
+		await assert.rejects(gf.dzengiApiRequest.call(ctx, 'POST', '/order', { symbol: 'X' }, {}, false, { itemIndex: 2 }), (error) => {
+			assert.equal(error.name, 'NodeApiError');
+			assert.match(error.message, /^Network error: .*Dzengi.*UNKNOWN/);
+			assert.match(error.description, new RegExp(`Network error code: ${code}`));
+			assert.match(error.description, /Request: POST \/order/);
+			assert.equal(error.context.itemIndex, 2);
+			return true;
+		});
+		assert.equal(ctx.requests.length, 1, 'an ambiguous order must not be re-sent');
+	});
+}
+
+test('network errors after exhausted read retries keep a Dzengi-specific message', async () => {
+	const ctx = createContext({ responses: () => networkError('ENOTFOUND') });
+	await assert.rejects(gf.dzengiApiRequest.call(ctx, 'GET', '/account', {}, {}, false, { maxRetries: 0 }), (error) => {
+		assert.equal(error.message, 'Network error: the Dzengi host name could not be resolved.');
+		assert.doesNotMatch(error.message, /UNKNOWN/);
+		assert.match(error.description, /ENOTFOUND/);
+		return true;
+	});
+});
+
+test('network error details never include a signed URL', async () => {
+	const leaky = networkError('ECONNRESET');
+	leaky.message = 'socket hang up https://api-adapter.dzengi.com/api/v1/order?symbol=X&signature=deadbeef';
+	const ctx = createContext({ responses: [leaky] });
+	await assert.rejects(gf.dzengiApiRequest.call(ctx, 'POST', '/order', { symbol: 'X' }), (error) => {
+		assert.doesNotMatch(`${error.message} ${error.description}`, /signature/);
+		return true;
+	});
+});
+
 test('thrown HTTP errors (helpers that ignore ignoreHttpStatusErrors) are handled too', async () => {
 	const axiosLike = Object.assign(new Error('Request failed with status code 400'), {
 		response: { status: 400, data: { code: -1102, msg: 'Mandatory parameter quantity was not sent.' }, headers: {} },

@@ -23,7 +23,7 @@
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-assets.js",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test \"test/*.test.js\"",
+    "test": "npm run build && node --test test/",
     "prepublishOnly": "npm test"
   },
   "n8n": {
