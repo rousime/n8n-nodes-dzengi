@@ -1,0 +1,54 @@
+{
+  "name": "n8n-nodes-dzengi",
+  "version": "1.0.0",
+  "description": "n8n community nodes for the Dzengi.com trading API: REST v1/v2 (orders, account, leverage positions, market data) and a WebSocket trigger",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "dzengi",
+    "trading",
+    "crypto",
+    "tokenized-assets",
+    "api"
+  ],
+  "license": "MIT",
+  "homepage": "https://dzengi.com/api",
+  "main": "index.js",
+  "files": [
+    "dist",
+    "index.js"
+  ],
+  "scripts": {
+    "clean": "node scripts/clean.js",
+    "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-assets.js",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"test/*.test.js\"",
+    "prepublishOnly": "npm test"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/DzengiApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Dzengi/Dzengi.node.js",
+      "dist/nodes/Dzengi/DzengiTrigger.node.js"
+    ]
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
+    "n8n-workflow": "*",
+    "typescript": "~5.5.4"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "engines": {
+    "node": ">=20.15"
+  }
+}

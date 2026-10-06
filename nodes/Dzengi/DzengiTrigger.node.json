@@ -1,0 +1,10 @@
+{
+  "node": "n8n-nodes-dzengi.dzengiTrigger",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": ["Finance & Accounting"],
+  "resources": {
+    "primaryDocumentation": [{ "url": "https://dzengi.com/general-websocket-api-information" }],
+    "credentialDocumentation": [{ "url": "https://dzengi.com/api-get-started" }]
+  }
+}
